@@ -9,14 +9,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
             console.log(`Unread count updated: ${unreadCount}`);
 
-            if (window.__TAURI_INTERNALS__) {
-                // Tauri strictly expects the payload to be a stringified JSON value!
-                window.__TAURI_INTERNALS__.invoke('plugin:event|emit', {
-                    event: 'badge-update',
-                    payload: JSON.stringify(unreadCount) 
-                })
-                .then(() => console.log("🔥 Event successfully fired to Rust!"))
-                .catch(err => console.error("Event failed:", err));
+            const payload = {
+                cmd: 'plugin:event|emit',
+                event: 'badge-update',
+                payload: JSON.stringify(unreadCount),
+                callback: 0,
+                error: 0
+            };
+
+            if (window.chrome && window.chrome.webview) {
+                // Windows (WebView2)
+                window.chrome.webview.postMessage(payload);
+            } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ipc) {
+                // macOS / Linux (WebKit)
+                window.webkit.messageHandlers.ipc.postMessage(payload);
             }
         });
 

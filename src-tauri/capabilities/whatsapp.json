@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "whatsapp-webview",
+  "description": "Minimal capabilities for the WhatsApp webview",
+  "windows": [
+    "main"
+  ],
+  "webviews": [
+    "whatsapp"
+  ],
+  "permissions": [
+    "core:event:allow-emit"
+  ],
+  "remote": {
+    "urls": [
+      "https://web.whatsapp.com"
+    ]
+  }
+}

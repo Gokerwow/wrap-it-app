@@ -16,7 +16,9 @@ pub struct AppConfig {
     // ── Wallpaper ─────────────────────────────────────────────────────────
     pub wallpaper_url: Option<String>,  // Remote image URL for wallpaper
     pub local_path: Option<String>,     // Local file path if use_local is true
+    #[serde(default)]
     pub use_local: bool,                // Whether to use local file instead of URL
+    #[serde(default)]
     pub compress_image: bool,           // Compress wallpaper before injecting
 
     // ── WhatsApp CSS Variable Overrides ───────────────────────────────────
@@ -39,6 +41,7 @@ pub struct AppConfig {
 
     // ── Fixes ─────────────────────────────────────────────────────────────
     pub search_container_fix: Option<String>, // "as-is" | "fixed" — margin→padding fix
+    pub custom_css: Option<String>,
 }
 
 #[derive(Default)]
@@ -117,7 +120,7 @@ fn resize_sidebar(app_handle: tauri::AppHandle, state: tauri::State<'_, AppLayou
 pub fn run() {
     tauri::Builder::default()
         .manage(AppLayoutState {
-            sidebar_width: Mutex::new(200.0),
+            sidebar_width: Mutex::new(260.0),
         })
         .setup(|app| {
             let app_handle_badge = app.handle().clone();
@@ -147,7 +150,6 @@ pub fn run() {
             set_chat_wallpaper,
             set_chat_wallpaper_local,
             reset_wallpaper_default,
-            force_open_in_browser,
             set_accent_color,
             set_content_deemphasized,
             set_bubble_surface_incoming,
@@ -183,7 +185,9 @@ pub fn run() {
             reset_components_active_list_row,
             reset_background_default,
             reset_chat_background_wallpaper,
-            get_config_for_frontend
+            get_config_for_frontend,
+            apply_config,
+            set_custom_css
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -213,8 +217,9 @@ fn setup_desktop_layout(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
     let app_handle = app.handle().clone();
     let app_handle_for_nav = app_handle.clone();
     let app_handle_for_config = app_handle_for_nav.clone();
+    let app_handle_for_load = app_handle.clone();
     
-    let parsed_config = get_parsed_config(&app_handle).unwrap();
+    let parsed_config = get_parsed_config(&app_handle).unwrap_or_default();
 
     let has_wallpaper = parsed_config.wallpaper_url.is_some() || parsed_config.local_path.is_some();
 
@@ -222,13 +227,13 @@ fn setup_desktop_layout(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
         if parsed_config.use_local {
             if let Some(path) = parsed_config.local_path {
                 tauri::async_runtime::spawn(async move {
-                    set_chat_wallpaper_local(app_handle_for_config.clone(), path, parsed_config.compress_image, false).await;
+                    let _ = set_chat_wallpaper_local(app_handle_for_config.clone(), path, parsed_config.compress_image, false).await;
                 });
             }
         } else {
             if let Some(url) = parsed_config.wallpaper_url {
                 tauri::async_runtime::spawn(async move {
-                    set_chat_wallpaper(app_handle_for_config.clone(), url, parsed_config.compress_image, false).await;
+                    let _ = set_chat_wallpaper(app_handle_for_config.clone(), url, parsed_config.compress_image, false).await;
                 });
             }
         }
@@ -252,6 +257,7 @@ fn setup_desktop_layout(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
         background_default:         parsed_config.background_default.unwrap_or_default(),
         chat_background_wallpaper:  parsed_config.chat_background_wallpaper.unwrap_or_default(),
         search_container_fix:       parsed_config.search_container_fix.unwrap_or_else(|| "as-is".to_string()),
+        active_custom_css:          parsed_config.custom_css.unwrap_or_default(),
         ..Default::default()
     };
     
@@ -266,18 +272,23 @@ fn setup_desktop_layout(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
     .on_navigation(move |url| {
         // Check the host instantly to skip unrelated navigations
         if url.host_str() == Some("web.whatsapp.com") {
-            println!("Native Navigation Detected: WhatsApp frame is rendering!");
-
-            // 1. Clone the handle out here in the synchronous world
-            let app_handle_clone = app_handle_for_nav.clone();
-
-            // 2. Pass it into the async move block
+            true
+        } else {
+            // It's an external link redirect! Open it in default system browser
+            println!("External Navigation Intercepted: Opening {} in system browser", url);
+            let opener = app_handle_for_nav.opener();
+            let _ = opener.open_url(url.as_str(), None::<&str>);
+            false // Prevent loading the external URL inside the WhatsApp webview
+        }
+    })
+    .on_page_load(move |_, payload| {
+        if payload.event() == tauri::webview::PageLoadEvent::Finished {
+            println!("Page finished loading: refreshing webview styles!");
+            let app_handle_clone = app_handle_for_load.clone();
             tauri::async_runtime::spawn(async move {
                 refresh_webview_styles(&app_handle_clone);
             });
         }
-        
-        true // Always allow the navigation to proceed normally without lag
     })
     .initialization_script("window.__TAURI_IPC__ = window.__tauri_ipc__;")
     .initialization_script(include_str!("../preload.js"))
@@ -321,82 +332,99 @@ fn setup_desktop_layout(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
 
 // Set wallpaper using URL by comprssing the image to 1920
 #[tauri::command]
-async fn set_chat_wallpaper(app_handle: tauri::AppHandle, wallpaper_url: String, compress_image: bool, save_to_config: bool) {
-    if let Ok(response) = reqwest::get(&wallpaper_url).await {
-        if let Ok(image_bytes) = response.bytes().await {
-            println!("GET THE IMAGE Url: {}", wallpaper_url);
-            let max_dimension = 1920;
-            let bytes_to_encode = tauri::async_runtime::spawn_blocking(move || {
-                if compress_image {
-                    compress_image_to_jpeg(&image_bytes, max_dimension)
-                } else {
-                    image_bytes.to_vec()
-                }
-            }).await.unwrap();
+async fn set_chat_wallpaper(app_handle: tauri::AppHandle, wallpaper_url: String, compress_image: bool, save_to_config: bool) -> Result<(), String> {
+    let response = reqwest::get(&wallpaper_url)
+        .await
+        .map_err(|e| format!("Failed to download wallpaper: {}", e))?;
 
-            let b64_encoded_string = general_purpose::STANDARD.encode(&bytes_to_encode);
-
-            let ram_state = app_handle.state::<AppRamState>();
-            if let Ok(mut cache) = ram_state.inner().0.lock() {
-                cache.active_wallpaper_b64 = b64_encoded_string
-            }
-
-            if save_to_config {
-                update_config(&app_handle, |configs| {
-                    configs.wallpaper_url = Some(wallpaper_url);
-                    configs.use_local = false;
-                    configs.local_path = None;
-                    configs.compress_image = compress_image;
-                });
-            }
-
-            refresh_webview_styles(&app_handle);
-            
-        }
-    } else {
-        println!("Failed to read file at Url: {}", wallpaper_url);
+    if !response.status().is_success() {
+        return Err(format!("Server returned HTTP status: {}", response.status()));
     }
+
+    let image_bytes = response.bytes()
+        .await
+        .map_err(|e| format!("Failed to read image bytes: {}", e))?;
+
+    println!("GET THE IMAGE Url: {}", wallpaper_url);
+    let max_dimension = 1920;
+    let bytes_to_encode = tauri::async_runtime::spawn_blocking(move || {
+        if compress_image {
+            compress_image_to_jpeg(&image_bytes, max_dimension)
+        } else {
+            image_bytes.to_vec()
+        }
+    }).await.map_err(|e| format!("Image processing task failed: {}", e))?;
+
+    if !compress_image {
+        if let Err(e) = load_from_memory(&bytes_to_encode) {
+            return Err(format!("Invalid image file format: {}", e));
+        }
+    }
+
+    let b64_encoded_string = general_purpose::STANDARD.encode(&bytes_to_encode);
+
+    let ram_state = app_handle.state::<AppRamState>();
+    if let Ok(mut cache) = ram_state.inner().0.lock() {
+        cache.active_wallpaper_b64 = b64_encoded_string;
+    }
+
+    if save_to_config {
+        update_config(&app_handle, |configs| {
+            configs.wallpaper_url = Some(wallpaper_url);
+            configs.use_local = false;
+            configs.local_path = None;
+            configs.compress_image = compress_image;
+        });
+    }
+
+    refresh_webview_styles(&app_handle);
+    Ok(())
 }
 
 // Set wallpaper using local file path by comprssing the image to 1920
 #[tauri::command]
-async fn set_chat_wallpaper_local(app_handle: tauri::AppHandle, file_path: String,compress_image: bool, save_to_config: bool) {
+async fn set_chat_wallpaper_local(app_handle: tauri::AppHandle, file_path: String, compress_image: bool, save_to_config: bool) -> Result<(), String> {
     // 1. Still use a background thread so reading a massive 4K image 
     // from a slow hard drive won't drop frames in your Svelte UI!
     // 2. Read the raw bytes straight from the local disk path
-    if let Ok(image_bytes) = tokio::fs::read(&file_path).await {
-            let max_dimension = 1920;
-            let bytes_to_encode = tauri::async_runtime::spawn_blocking(move || {
-                if compress_image {
-                    compress_image_to_jpeg(&image_bytes, max_dimension)
-                } else {
-                    image_bytes.to_vec()
-                }
-            }).await.unwrap(); // .await waits for the CPU crunching to finish safely
+    let image_bytes = tokio::fs::read(&file_path)
+        .await
+        .map_err(|e| format!("Failed to read local file: {}", e))?;
 
-            // 5. Encode the tiny compressed JPEG bytes into a Base64 string
-            let b64_encoded_string = general_purpose::STANDARD.encode(&bytes_to_encode);
+    let max_dimension = 1920;
+    let bytes_to_encode = tauri::async_runtime::spawn_blocking(move || {
+        if compress_image {
+            compress_image_to_jpeg(&image_bytes, max_dimension)
+        } else {
+            image_bytes.to_vec()
+        }
+    }).await.map_err(|e| format!("Image processing task failed: {}", e))?;
 
-            let ram_state = app_handle.state::<AppRamState>();
-
-            if let Ok(mut cache) = ram_state.inner().0.lock() {
-                cache.active_wallpaper_b64 = b64_encoded_string;
-            }
-
-            if save_to_config {
-                update_config(&app_handle, |configs| {
-                    configs.wallpaper_url = None;
-                    configs.use_local = true;
-                    configs.local_path = Some(file_path);
-                    configs.compress_image = compress_image;
-                });
-            }
-
-            refresh_webview_styles(&app_handle);
-            
-    } else {
-        println!("Failed to read file at path: {}", file_path);
+    if !compress_image {
+        if let Err(e) = load_from_memory(&bytes_to_encode) {
+            return Err(format!("Invalid image file format: {}", e));
+        }
     }
+
+    // 5. Encode the tiny compressed JPEG bytes into a Base64 string
+    let b64_encoded_string = general_purpose::STANDARD.encode(&bytes_to_encode);
+
+    let ram_state = app_handle.state::<AppRamState>();
+    if let Ok(mut cache) = ram_state.inner().0.lock() {
+        cache.active_wallpaper_b64 = b64_encoded_string;
+    }
+
+    if save_to_config {
+        update_config(&app_handle, |configs| {
+            configs.wallpaper_url = None;
+            configs.use_local = true;
+            configs.local_path = Some(file_path);
+            configs.compress_image = compress_image;
+        });
+    }
+
+    refresh_webview_styles(&app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -525,6 +553,7 @@ fn reset_everything(app_handle: tauri::AppHandle) {
         config.components_active_list_row = None;
         config.background_default         = None;
         config.chat_background_wallpaper  = None;
+        config.custom_css                 = None;
     });
  
     // 2. Restore everything in RAM to defaults in a single lock
@@ -547,6 +576,7 @@ fn reset_everything(app_handle: tauri::AppHandle) {
     state.components_active_list_row = String::new();
     state.background_default         = String::new();
     state.chat_background_wallpaper  = String::new();
+    state.active_custom_css          = String::new();
     drop(state);
  
     // 3. Clean up the WhatsApp webview in a single eval
@@ -565,12 +595,39 @@ fn reset_everything(app_handle: tauri::AppHandle) {
                         
                         const tag = document.getElementById('wrap-wallpaper-engine');
                         if (tag) tag.remove();
+
+                        const customCssTag = document.getElementById('wrap-custom-css');
+                        if (customCssTag) customCssTag.remove();
                     })();
                 ";
                 let _ = whatsapp_view.eval(js);
             }
         }
     });
+}
+
+#[tauri::command]
+async fn set_custom_css(app_handle: tauri::AppHandle, css: String, save_to_config: bool) {
+    let ram_state = app_handle.state::<AppRamState>();
+    if let Ok(mut cache) = ram_state.inner().0.lock() {
+        cache.active_custom_css = css.clone();
+    }
+    
+    if let Some(main_window) = app_handle.get_window("main") {
+        if let Some(whatsapp_view) = main_window.get_webview("whatsapp") {
+            let js_payload = format!(
+                "if(window.__whatsWrapUpdateCustomCss) window.__whatsWrapUpdateCustomCss({});",
+                serde_json::to_string(&css).unwrap()
+            );
+            let _ = whatsapp_view.eval(&js_payload);
+        }
+    }
+
+    if save_to_config {
+        update_config(&app_handle, |config| {
+            config.custom_css = Some(css);
+        });
+    }
 }
  
 // ── Per-color reset commands ──────────────────────────────────────────────────
@@ -629,12 +686,6 @@ reset_color_command!(reset_content_on_accent,          content_on_accent,       
 reset_color_command!(reset_components_active_list_row, components_active_list_row, components_active_list_row, "--WDS-components-active-list-row");
 reset_color_command!(reset_background_default,         background_default,         background_default,         "--background-default");
 reset_color_command!(reset_chat_background_wallpaper,  chat_background_wallpaper,  chat_background_wallpaper,  "--WDS-systems-chat-background-wallpaper");
-#[tauri::command]
-fn force_open_in_browser(app_handle: tauri::AppHandle, url: String) {
-    println!("Rust Command Triggered! Forcing open: {}", url);
-    let opener = app_handle.opener();
-    let _ = opener.open_url(&url, None::<&str>);
-}
 
 #[tauri::command]
 fn update_badge_count(app_handle: tauri::AppHandle, count: i32) {
@@ -940,6 +991,48 @@ where
     }
 }
 
+#[tauri::command]
+fn apply_config(app_handle: tauri::AppHandle, mut config: AppConfig) {
+    // Keep existing wallpaper and custom CSS settings from the parsed config if they exist
+    if let Ok(current_config) = get_parsed_config(&app_handle) {
+        config.wallpaper_url = current_config.wallpaper_url;
+        config.local_path = current_config.local_path;
+        config.use_local = current_config.use_local;
+        config.compress_image = current_config.compress_image;
+        config.custom_css = current_config.custom_css;
+    }
+    
+    // Save config to disk in a single write operation
+    let json_text = serde_json::to_string_pretty(&config).unwrap();
+    let path = get_config_path(&app_handle);
+    let _ = std::fs::write(&path, json_text.as_bytes());
+
+    // Update RAM cache state in a single lock block
+    let ram_state = app_handle.state::<AppRamState>();
+    if let Ok(mut cache) = ram_state.inner().0.lock() {
+        cache.main_color                 = config.main_color.clone().unwrap_or_default();
+        cache.content_deemphasized       = config.content_deemphasized.clone().unwrap_or_default();
+        cache.bubble_surface_incoming    = config.bubble_surface_incoming.clone().unwrap_or_default();
+        cache.bubble_surface_outgoing    = config.bubble_surface_outgoing.clone().unwrap_or_default();
+        cache.chat_surface_composer      = config.chat_surface_composer.clone().unwrap_or_default();
+        cache.surface_highlight          = config.surface_highlight.clone().unwrap_or_default();
+        cache.surface_default            = config.surface_default.clone().unwrap_or_default();
+        cache.persistent_always_branded  = config.persistent_always_branded.clone().unwrap_or_default();
+        cache.content_default            = config.content_default.clone().unwrap_or_default();
+        cache.surface_emphasized         = config.surface_emphasized.clone().unwrap_or_default();
+        cache.message_primary            = config.message_primary.clone().unwrap_or_default();
+        cache.content_read               = config.content_read.clone().unwrap_or_default();
+        cache.content_on_accent          = config.content_on_accent.clone().unwrap_or_default();
+        cache.components_active_list_row = config.components_active_list_row.clone().unwrap_or_default();
+        cache.background_default         = config.background_default.clone().unwrap_or_default();
+        cache.chat_background_wallpaper  = config.chat_background_wallpaper.clone().unwrap_or_default();
+        cache.search_container_fix       = config.search_container_fix.clone().unwrap_or_else(|| "as-is".to_string());
+        cache.active_custom_css          = config.custom_css.clone().unwrap_or_default();
+    }
+
+    refresh_webview_styles(&app_handle);
+}
+
 fn get_config_path(app_handle: &tauri::AppHandle) -> PathBuf {
     let mut local_path = app_handle.path().app_local_data_dir().unwrap();
     local_path.push("whats-wrap");
@@ -968,16 +1061,18 @@ fn get_parsed_config(app_handle: &tauri::AppHandle) -> Result<AppConfig, Box<dyn
     
     // Handle empty files
     if json_text.trim().is_empty() {
-        return Ok(AppConfig {
-            wallpaper_url: None,
-            use_local: false,
-            local_path: None,
-            compress_image: false,
-            main_color: None,
-            ..Default::default()
-        });
+        return Ok(AppConfig::default());
     }
 
-    let parsed_config: AppConfig = serde_json::from_str(&json_text)?;
-    Ok(parsed_config)
+    match serde_json::from_str::<AppConfig>(&json_text) {
+        Ok(parsed) => Ok(parsed),
+        Err(e) => {
+            eprintln!("Corrupted config.json: {}. Resetting to defaults.", e);
+            let default_config = AppConfig::default();
+            if let Ok(default_json) = serde_json::to_string_pretty(&default_config) {
+                let _ = std::fs::write(&config_path, default_json.as_bytes());
+            }
+            Ok(default_config)
+        }
+    }
 }

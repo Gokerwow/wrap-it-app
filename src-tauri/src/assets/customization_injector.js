@@ -85,4 +85,20 @@
             el.style.paddingBottom = mb || '8px';
         }
     }
+
+    // 7. Custom CSS Engine
+    let customCssTag = document.getElementById('wrap-custom-css');
+    if (!customCssTag) {
+        customCssTag = document.createElement('style');
+        customCssTag.id = 'wrap-custom-css';
+        document.head.appendChild(customCssTag);
+    }
+    customCssTag.textContent = payload.customCss || "";
+
+    window.__whatsWrapUpdateCustomCss = function(cssText) {
+        const tag = document.getElementById('wrap-custom-css');
+        if (tag) {
+            tag.textContent = cssText || "";
+        }
+    };
 })();

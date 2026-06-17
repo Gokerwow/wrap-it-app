@@ -6,8 +6,7 @@
     "main"
   ],
   "webviews": [
-    "main_ui",
-    "whatsapp"
+    "main_ui"
   ],
   "permissions": [
     "core:default",

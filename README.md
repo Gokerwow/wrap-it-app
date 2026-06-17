@@ -4,17 +4,20 @@ Wrap It App is a desktop wrapper for WhatsApp Web built with Tauri and Svelte. I
 
 ## Features
 
-- **UI Customization:** Override default interface colors including backgrounds, accent colors, and sidebars.
-- **Chat Bubbles:** Modify incoming and outgoing message bubbles, text colors, and read-receipt indicators.
-- **Custom Backgrounds:** Set the chat wallpaper using an image URL or a local file (includes an image compression toggle).
-- **Layout Adjustments:** Apply CSS fixes to adjust specific UI elements, such as the search container layout.
-- **Lightweight:** Utilizes Tauri's Rust-based backend for reduced memory usage.
+- **UI Customization & Presets:** Override default interface colors (backgrounds, accents, list rows) or switch instantly between presets like *Teal Delight*, *Cyberpunk*, *Nordic Frost*, and *Sunset Rose*.
+- **Monospace CSS Editor:** Inject custom raw stylesheets directly with real-time live preview rendering in the webview, complemented by quick AMOLED/Matrix style templates.
+- **Variables & Selectors Guide:** Built-in documentation guide lists standard customization variables and HTML target classes.
+- **Global Tweaks Search Bar:** Quickly search settings using the global search bar (focus with `Ctrl+K` / `Cmd+K`, clear with `Escape`).
+- **Chat Bubbles:** Modify incoming and outgoing message bubbles, text colors, and read checkmark colors.
+- **Custom Backgrounds:** Apply custom wallpaper using an image URL or a local file with optional JPEG compression.
+- **Security Hardening:** Fully isolated capabilities, strict Content Security Policy (CSP), and automatic external link browser interception.
+- **Lightweight:** Utilizes Tauri v2 Rust-based webview wrapper for a tiny resource footprint.
 
 ## Tech Stack
 
-- **Frontend:** Svelte 5, TypeScript, Vite
+- **Frontend:** Svelte 5 (reactive runes), TypeScript, Vite
 - **Backend:** Tauri v2 (Rust)
-- **Package Manager:** Bun
+- **Package Manager:** Bun / Cargo
 
 ## Getting Started
 
@@ -63,9 +66,9 @@ The compiled binaries will be located in the `src-tauri/target/release` director
 
 ## Roadmap
 
-* [ ] Global search functionality (Ctrl+K / Cmd+K)
 * [ ] Custom notification sounds
-* [ ] Theme profile import/export
+* [ ] Theme profile import/export (.json config)
+* [ ] Multi-profile support
 
 ## Disclaimer
 
