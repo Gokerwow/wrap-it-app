@@ -800,7 +800,8 @@ function setAutoMatchStatus(message, isError) {
 }
 
 function syncAutoMatchUI() {
-  if (revertAutoMatchButton) revertAutoMatchButton.hidden = !state.autoMatchSnapshot;
+  const hasSnapshot = Boolean(state.autoMatchSnapshot) && Object.keys(state.autoMatchSnapshot).length > 0;
+  if (revertAutoMatchButton) revertAutoMatchButton.hidden = !hasSnapshot;
   if (autoMatchToggle) autoMatchToggle.checked = state.settings.autoMatchOnWallpaperChange === true;
 }
 
@@ -1036,8 +1037,12 @@ function renderPresets() {
     button.append(top, name);
     button.addEventListener('click', () => {
       const next = normalizeSettings(state.settings);
+      next.overrides = {};
+      state.autoMatchSnapshot = null;
       next.presetId = preset.id;
       persist(next);
+      if (revertAutoMatchButton) revertAutoMatchButton.hidden = true;
+      if (autoMatchStatus) autoMatchStatus.textContent = '';
       renderAll();
     });
     presetGrid.appendChild(button);
