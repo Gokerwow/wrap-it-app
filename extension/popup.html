@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wrap It</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="brand">
+          <div class="brand-row">
+            <h1>Wrap It</h1>
+            <span class="status-wrap">
+              <span id="statusDot" class="dot" aria-hidden="true"></span>
+              <span id="statusBadge" class="badge">Off</span>
+            </span>
+          </div>
+          <p class="subtle" id="statusText">Using WhatsApp default</p>
+        </div>
+        <label class="switch-wrap" for="enabledToggle">
+          <span id="enabledLabel">Off</span>
+          <span class="switch">
+            <input id="enabledToggle" type="checkbox" />
+            <span class="track" aria-hidden="true"><span class="thumb" aria-hidden="true"></span></span>
+          </span>
+        </label>
+      </header>
+
+      <section class="preview-card" aria-label="Live preview">
+        <div class="preview-head">
+          <h2>Preview</h2>
+          <span class="preview-note">Updates as you edit</span>
+        </div>
+        <div class="preview-chat" id="previewChat">
+          <div class="bubble incoming" id="previewIncoming">
+            <p class="bubble-text" id="previewIncomingText">Hey, this is how incoming looks</p>
+            <span class="bubble-time" id="previewIncomingTime">09:41</span>
+          </div>
+          <div class="bubble outgoing" id="previewOutgoing">
+            <p class="bubble-text" id="previewOutgoingText">And this is outgoing with your colors</p>
+            <span class="bubble-meta">
+              <span class="bubble-time" id="previewOutgoingTime">09:42</span>
+              <span class="ticks" id="previewTicks" aria-hidden="true">✓✓</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <nav class="tabs" role="tablist" aria-label="Theme sections">
+        <button type="button" role="tab" id="tab-presets" aria-controls="panel-presets" aria-selected="true" class="tab">Presets</button>
+        <button type="button" role="tab" id="tab-customize" aria-controls="panel-customize" aria-selected="false" class="tab" tabindex="-1">Customize</button>
+        <button type="button" role="tab" id="tab-advanced" aria-controls="panel-advanced" aria-selected="false" class="tab" tabindex="-1">Advanced</button>
+      </nav>
+
+      <section id="panel-presets" role="tabpanel" aria-labelledby="tab-presets" class="panel">
+        <div class="section-head">
+          <h2>Presets</h2>
+          <button type="button" class="ghost-button" id="resetAllButton">Reset all</button>
+        </div>
+        <div class="preset-grid" id="presetGrid"></div>
+        <p class="help">Reset all clears overrides and back to WhatsApp default.</p>
+      </section>
+
+      <section id="panel-customize" role="tabpanel" aria-labelledby="tab-customize" class="panel" hidden>
+        <div class="section-head">
+          <h2>Customize</h2>
+        </div>
+        <div class="automatch-card">
+          <div class="automatch-text">
+            <h3>Match Wallpaper Theme</h3>
+            <p>Generate harmonious colors from your active wallpaper.</p>
+          </div>
+          <div class="automatch-actions">
+            <button type="button" id="autoMatchButton" class="ghost-button">Auto-Match Theme</button>
+            <button type="button" id="revertAutoMatchButton" class="reset-button" hidden>Revert</button>
+          </div>
+          <p id="autoMatchStatus" class="help" role="status" aria-live="polite"></p>
+        </div>
+        <label class="search-row" for="tokenSearch">
+          <span class="sr-only">Filter colors</span>
+          <input id="tokenSearch" type="search" placeholder="Filter colors" autocomplete="off" />
+        </label>
+        <p class="help" id="searchEmpty" hidden>No colors match this filter.</p>
+        <div id="tokenGroups"></div>
+      </section>
+
+      <section id="panel-advanced" role="tabpanel" aria-labelledby="tab-advanced" class="panel" hidden>
+        <div class="section-head">
+          <h2>Advanced</h2>
+        </div>
+        <h3 class="mini-heading">Wallpaper</h3>
+        <p class="help">Optional chat background. Images are compressed on your device and stored as data URLs.</p>
+        <div class="wallpaper-modes" role="group" aria-label="Wallpaper mode">
+          <button type="button" class="wallpaper-mode" id="wallpaperModeColor" aria-pressed="true">Color</button>
+          <button type="button" class="wallpaper-mode" id="wallpaperModeFile" aria-pressed="false">Image File</button>
+          <button type="button" class="wallpaper-mode" id="wallpaperModeUrl" aria-pressed="false">Image Link</button>
+        </div>
+        <div id="wallpaperPanelColor">
+          <div class="field-row wallpaper-row">
+            <label class="field-label" for="wallpaperInput">Custom wallpaper</label>
+            <input class="field-input color-input" id="wallpaperInput" type="color" value="#0b0f19" aria-label="Custom wallpaper color" />
+            <span class="hex-pill" id="wallpaperHex">#0b0f19</span>
+            <button type="button" class="reset-button" id="wallpaperClear" aria-label="Clear custom wallpaper">Clear</button>
+          </div>
+        </div>
+        <div id="wallpaperPanelFile" hidden>
+          <label class="drop-area" for="wallpaperFile">
+            <span class="drop-title">Choose an image file</span>
+            <span class="drop-sub">PNG, JPEG, WEBP or GIF. Max 1920px, saved as JPEG.</span>
+            <input id="wallpaperFile" type="file" accept="image/*" />
+          </label>
+        </div>
+        <div id="wallpaperPanelUrl" hidden>
+          <label class="field-label" for="wallpaperUrl">Image link</label>
+          <div class="url-row">
+            <input id="wallpaperUrl" type="url" inputmode="url" placeholder="https://example.com/photo.jpg" autocomplete="off" />
+            <button type="button" id="wallpaperFetch">Fetch and Apply</button>
+          </div>
+        </div>
+        <div id="wallpaperActiveWrap" class="wallpaper-active" hidden>
+          <img id="wallpaperThumb" alt="Active wallpaper preview" />
+          <div class="wallpaper-active-meta">
+            <p id="wallpaperMeta" class="help"></p>
+            <button type="button" class="reset-button" id="wallpaperRemove">Remove Wallpaper</button>
+          </div>
+        </div>
+        <div id="wallpaperAdjustWrap" class="wallpaper-adjust" hidden>
+          <h4 class="mini-heading">Position and Scale</h4>
+          <p class="help">Drag the dot or use the controls to frame your wallpaper.</p>
+          <div id="wallpaperPanPad" class="pan-pad" role="application" aria-label="Wallpaper position pad. Drag anywhere to pan.">
+            <span id="wallpaperPanHandle" class="pan-handle" role="slider" tabindex="0" aria-label="Wallpaper position target" aria-valuemin="0" aria-valuemax="100" aria-valuetext="50 percent horizontal, 50 percent vertical"></span>
+            <span class="pan-hint" aria-hidden="true">Drag anywhere to pan</span>
+          </div>
+          <div class="adjust-row">
+            <span class="field-label" id="alignLabel">Quick align</span>
+            <div id="wallpaperAlignGrid" class="align-grid" role="group" aria-labelledby="alignLabel">
+              <button type="button" data-x="0" data-y="0" aria-label="Align top left">&#8598;</button>
+              <button type="button" data-x="50" data-y="0" aria-label="Align top">&#8593;</button>
+              <button type="button" data-x="100" data-y="0" aria-label="Align top right">&#8599;</button>
+              <button type="button" data-x="0" data-y="50" aria-label="Align center left">&#8592;</button>
+              <button type="button" data-x="50" data-y="50" aria-label="Align center">&#8226;</button>
+              <button type="button" data-x="100" data-y="50" aria-label="Align center right">&#8594;</button>
+              <button type="button" data-x="0" data-y="100" aria-label="Align bottom left">&#8601;</button>
+              <button type="button" data-x="50" data-y="100" aria-label="Align bottom">&#8595;</button>
+              <button type="button" data-x="100" data-y="100" aria-label="Align bottom right">&#8600;</button>
+            </div>
+          </div>
+          <div class="adjust-row slider-row">
+            <label class="field-label" for="wallpaperPosX">Horizontal (X) <span id="wallpaperPosXValue" class="range-value">50%</span></label>
+            <input id="wallpaperPosX" type="range" min="0" max="100" step="1" value="50" aria-label="Wallpaper horizontal position" />
+          </div>
+          <div class="adjust-row slider-row">
+            <label class="field-label" for="wallpaperPosY">Vertical (Y) <span id="wallpaperPosYValue" class="range-value">50%</span></label>
+            <input id="wallpaperPosY" type="range" min="0" max="100" step="1" value="50" aria-label="Wallpaper vertical position" />
+          </div>
+          <div class="adjust-row slider-row">
+            <label class="field-label" for="wallpaperScale">Scale and Zoom <span id="wallpaperScaleValue" class="range-value">100% (Cover)</span></label>
+            <input id="wallpaperScale" type="range" min="100" max="250" step="1" value="100" aria-label="Wallpaper scale and zoom" />
+          </div>
+          <div class="adjust-row repeat-row">
+            <label class="repeat-label" for="wallpaperRepeat">
+              <input id="wallpaperRepeat" type="checkbox" />
+              <span>Repeat (Tile pattern)</span>
+            </label>
+            <button type="button" class="reset-button" id="wallpaperResetPos">Reset Position</button>
+          </div>
+          <div class="adjust-row repeat-row">
+            <label class="repeat-label" for="autoMatchToggle">
+              <input id="autoMatchToggle" type="checkbox" />
+              <span>Auto-adapt theme when wallpaper changes</span>
+            </label>
+          </div>
+        </div>
+        <p id="wallpaperStatus" class="wallpaper-status" role="status" aria-live="polite"></p>
+        <h3 class="mini-heading">Custom CSS</h3>
+        <p class="help">Applied last. Keep selectors generic so updates do not break them.</p>
+        <label class="sr-only" for="customCss">Custom CSS</label>
+        <textarea id="customCss" spellcheck="false" placeholder="Paste CSS here, for example: body { }"></textarea>
+      </section>
+
+      <p class="foot">Changes save automatically to this device.</p>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

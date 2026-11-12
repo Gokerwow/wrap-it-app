@@ -1,75 +1,55 @@
-# Wrap It App
+# Wrap It
 
-Wrap It App is a desktop wrapper for WhatsApp Web built with Tauri and Svelte. It provides extended customization options for the user interface, including custom color themes, chat bubble adjustments, and background modifications, while maintaining a low resource footprint compared to standard web clients.
+Lightweight Manifest V3 extension for Chrome, Edge, and Chromium browsers. It themes WhatsApp Web with design tokens and custom wallpapers. No build step, no backend.
 
 ## Features
 
-- **UI Customization & Presets:** Override default interface colors (backgrounds, accents, list rows) or switch instantly between presets like *Teal Delight*, *Cyberpunk*, *Nordic Frost*, and *Sunset Rose*.
-- **Monospace CSS Editor:** Inject custom raw stylesheets directly with real-time live preview rendering in the webview, complemented by quick AMOLED/Matrix style templates.
-- **Variables & Selectors Guide:** Built-in documentation guide lists standard customization variables and HTML target classes.
-- **Global Tweaks Search Bar:** Quickly search settings using the global search bar (focus with `Ctrl+K` / `Cmd+K`, clear with `Escape`).
-- **Chat Bubbles:** Modify incoming and outgoing message bubbles, text colors, and read checkmark colors.
-- **Custom Backgrounds:** Apply custom wallpaper using an image URL or a local file with optional JPEG compression.
-- **Security Hardening:** Fully isolated capabilities, strict Content Security Policy (CSP), and automatic external link browser interception.
-- **Lightweight:** Utilizes Tauri v2 Rust-based webview wrapper for a tiny resource footprint.
+- Switch between 5 color presets or edit individual tokens for surfaces, bubbles, text, and lines.
+- Set a custom wallpaper from a file or image URL, with drag to pan, zoom, and alignment controls.
+- Match the theme to the current wallpaper in one click by sampling dominant colors.
+- Add custom CSS that loads last, after the theme and wallpaper rules.
+- Check token health against live WhatsApp Web with the Sentinel script in `scripts/`.
 
-## Tech Stack
+## How it works
 
-- **Frontend:** Svelte 5 (reactive runes), TypeScript, Vite
-- **Backend:** Tauri v2 (Rust)
-- **Package Manager:** Bun / Cargo
+Most theme extensions break because WhatsApp Web compiles its UI with Meta StyleX into generated atomic classes like `.x1ppz1d2`, and injects local CSS variables on child elements that defeat `:root` inheritance. A rule set only on `:root` loses to those scoped values.
 
-## Getting Started
+Wrap It injects one rule on `:root, body, #app, *, *::before, *::after` with `!important`, so scoped containers cannot override the theme. It auto-derives `-RGB` companion tokens for translucent gradients and bubble tails, and writes fallback legacy names in the same rule, such as `--accent` and `--outgoing-bubble-background`. If WhatsApp reads either the new name or the old name, the color still applies.
 
-### Prerequisites
+Wallpapers go through a compression pipeline for the same practical reasons. WhatsApp CSP blocks external image domains, and raw photos exceed Chrome storage quotas. Wrap It scales images down to max 1920px using an offscreen canvas in the popup and saves them as compact base64 JPEG data URLs, usually around 150KB.
 
-Ensure you have the following installed on your system:
-- [Bun](https://bun.sh/)
-- [Rust](https://www.rust-lang.org/tools/install)
-- OS-specific build tools for Tauri (refer to the [Tauri v2 Prerequisites](https://v2.tauri.app/start/prerequisites/))
+## Installation
 
-### Installation
+1. Open extension settings (`chrome://extensions` or `edge://extensions`).
+2. Turn on Developer mode.
+3. Click "Load unpacked" and select the `extension/` directory.
+4. Open `web.whatsapp.com` and use the popup.
 
-1. Clone the repository:
- ```bash
- git clone [https://github.com/gokerwow/whats-wrap.git](https://github.com/gokerwow/whats-wrap.git)
- cd whats-wrap
-```
+## Privacy and security
 
-2. Install dependencies:
-```bash
-bun install
+- Permissions are limited to `storage` for local settings and a `web.whatsapp.com` host match to inject the theme.
+- Zero telemetry, zero analytics, zero remote script injection.
+- Does not touch or read chat content, messages, or contacts.
+- Does not automate any actions. Ban risk is zero, it works like Stylus or Dark Reader and only changes CSS.
 
-```
+## Sentinel
 
-
-
-### Development
-
-Run the development server. This will start the Vite frontend and open the Tauri application window:
+The Sentinel script audits local tokens against the live WhatsApp Web stylesheet. No login required.
 
 ```bash
-bun tauri dev
-
+python scripts/sentinel_wa_updater.py --check
+python scripts/sentinel_wa_updater.py --auto-patch
 ```
 
-### Build
+`--check` reports verified, missing, and new candidate tokens. `--auto-patch` adds new core tokens to `extension/tokens.json`, syncs `RGB_PAIRS` in `extension/content.js`, then runs `node --check` on the content and popup scripts.
 
-To compile the application into a standalone executable for your operating system:
+## Project structure
 
-```bash
-bun tauri build
-
-```
-
-The compiled binaries will be located in the `src-tauri/target/release` directory.
-
-## Roadmap
-
-* [ ] Custom notification sounds
-* [ ] Theme profile import/export (.json config)
-* [ ] Multi-profile support
+- `extension/` is the Manifest V3 extension with popup, content script, tokens, and icons.
+- `scripts/` holds the Sentinel updater for live token audits.
+- `docs/` holds planning and reference notes.
+- `reports/` holds generated audit reports.
 
 ## Disclaimer
 
-Wrap It App is an unofficial, third-party project built for personal use. It is not affiliated with, authorized, maintained, sponsored, or endorsed by WhatsApp, Meta Platforms, Inc., or any of their affiliates. Users are responsible for complying with WhatsApp's standard terms of service.
+Wrap It is an unofficial third party project for personal use. It is not affiliated with, authorized, maintained, sponsored, or endorsed by WhatsApp, Meta Platforms, Inc., or any of their affiliates.

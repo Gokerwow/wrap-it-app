@@ -1,8 +1,0 @@
-/* Chat Wallpaper Box target */
-[data-testid="conversation-background-default_chat_wallpaper"] {
-    background-image: var(--whats-wrap-wallpaper) !important;
-    background-size: cover !important;
-    background-position: center !important;
-    -webkit-mask-image: none !important;
-    mask-image: none !important;
-}
