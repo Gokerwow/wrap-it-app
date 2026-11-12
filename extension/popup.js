@@ -302,6 +302,8 @@ const wallpaperRepeat = $('#wallpaperRepeat');
 const wallpaperPosXValue = $('#wallpaperPosXValue');
 const wallpaperPosYValue = $('#wallpaperPosYValue');
 const wallpaperScaleValue = $('#wallpaperScaleValue');
+const wallpaperBrightness = $('#wallpaperBrightness');
+const wallpaperBrightnessValue = $('#wallpaperBrightnessValue');
 const wallpaperResetPos = $('#wallpaperResetPos');
 const autoMatchButton = $('#autoMatchButton');
 const revertAutoMatchButton = $('#revertAutoMatchButton');
@@ -353,12 +355,13 @@ function normalizeWallpaper(input, legacyColor) {
         posY: clampPos(input.posY, 50),
         scale: clampScale(input.scale),
         repeat: input.repeat === true,
+        brightness: clampNumber(input.brightness, 20, 100, 100),
       };
     }
     if (input.type === 'color' && HEX_RE.test(String(input.color || ''))) {
-      return { type: 'color', color: String(input.color).toLowerCase(), dataUrl: '' };
+      return { type: 'color', color: String(input.color).toLowerCase(), dataUrl: '', brightness: clampNumber(input.brightness, 20, 100, 100) };
     }
-    if (input.type === 'none') return { type: 'none', color: '', dataUrl: '' };
+    if (input.type === 'none') return { type: 'none', color: '', dataUrl: '', brightness: 100 };
   }
   if (HEX_RE.test(legacyColor || '')) return { type: 'color', color: String(legacyColor).toLowerCase(), dataUrl: '' };
   return { type: 'none', color: '', dataUrl: '' };
@@ -370,7 +373,8 @@ function wallpaperGeom(wallpaper) {
   const posY = typeof w.posY === 'number' && Number.isFinite(w.posY) ? Math.max(0, Math.min(100, Math.round(w.posY))) : 50;
   const scale = typeof w.scale === 'number' && Number.isFinite(w.scale) ? Math.max(100, Math.min(250, Math.round(w.scale))) : 100;
   const repeat = w.repeat === true;
-  return { posX, posY, scale, repeat };
+  const brightness = typeof w.brightness === 'number' && Number.isFinite(w.brightness) ? Math.max(20, Math.min(100, Math.round(w.brightness))) : 100;
+  return { posX, posY, scale, repeat, brightness };
 }
 
 function normalizeSettings(input) {
@@ -490,9 +494,11 @@ function syncAdjustControls() {
   if (wallpaperPosY) wallpaperPosY.value = String(geom.posY);
   if (wallpaperScale) wallpaperScale.value = String(geom.scale);
   if (wallpaperRepeat) wallpaperRepeat.checked = geom.repeat;
+  if (wallpaperBrightness) wallpaperBrightness.value = String(geom.brightness);
   if (wallpaperPosXValue) wallpaperPosXValue.textContent = `${geom.posX}%`;
   if (wallpaperPosYValue) wallpaperPosYValue.textContent = `${geom.posY}%`;
   if (wallpaperScaleValue) wallpaperScaleValue.textContent = formatScaleLabel(geom.scale);
+  if (wallpaperBrightnessValue) wallpaperBrightnessValue.textContent = geom.brightness === 100 ? '100% (Normal)' : `${geom.brightness}%`;
   if (wallpaperAlignGrid) {
     const buttons = wallpaperAlignGrid.querySelectorAll('button[data-x]');
     for (const btn of buttons) {
@@ -511,10 +517,12 @@ function applyWallpaperGeom(patch) {
   const posY = patch.posY !== undefined ? Math.max(0, Math.min(100, Math.round(Number(patch.posY)))) : base.posY;
   const scale = patch.scale !== undefined ? Math.max(100, Math.min(250, Math.round(Number(patch.scale)))) : base.scale;
   const repeat = patch.repeat !== undefined ? patch.repeat === true : base.repeat;
+  const brightness = patch.brightness !== undefined ? Math.max(20, Math.min(100, Math.round(Number(patch.brightness)))) : base.brightness;
   const safeX = Number.isFinite(posX) ? posX : base.posX;
   const safeY = Number.isFinite(posY) ? posY : base.posY;
   const safeScale = Number.isFinite(scale) ? scale : base.scale;
-  state.settings.wallpaper = { ...wallpaper, posX: safeX, posY: safeY, scale: safeScale, repeat };
+  const safeBrightness = Number.isFinite(brightness) ? brightness : base.brightness;
+  state.settings.wallpaper = { ...wallpaper, posX: safeX, posY: safeY, scale: safeScale, repeat, brightness: safeBrightness };
   syncAdjustControls();
   updatePreview();
   schedulePersist('wallpaper', state.settings.wallpaper);
@@ -970,7 +978,12 @@ function updatePreview() {
   if (wallpaper.type === 'image' && typeof wallpaper.dataUrl === 'string' && wallpaper.dataUrl.startsWith('data:image/')) {
     const geom = wallpaperGeom(wallpaper);
     previewChat.style.backgroundColor = fallback || '#0b0f19';
-    previewChat.style.backgroundImage = `url("${wallpaper.dataUrl}")`;
+    if (geom.brightness < 100) {
+      const dim = ((100 - geom.brightness) / 100).toFixed(2);
+      previewChat.style.backgroundImage = `linear-gradient(rgba(0, 0, 0, ${dim}), rgba(0, 0, 0, ${dim})), url("${wallpaper.dataUrl}")`;
+    } else {
+      previewChat.style.backgroundImage = `url("${wallpaper.dataUrl}")`;
+    }
     previewChat.style.backgroundPosition = `${geom.posX}% ${geom.posY}%`;
     previewChat.style.backgroundSize = geom.scale > 100 ? `${geom.scale}%` : 'cover';
     previewChat.style.backgroundRepeat = geom.repeat ? 'repeat' : 'no-repeat';
@@ -1369,12 +1382,16 @@ if (wallpaperScale) {
   wallpaperScale.addEventListener('input', () => applyWallpaperGeom({ scale: Number(wallpaperScale.value) }));
 }
 
+if (wallpaperBrightness) {
+  wallpaperBrightness.addEventListener('input', () => applyWallpaperGeom({ brightness: Number(wallpaperBrightness.value) }));
+}
+
 if (wallpaperRepeat) {
   wallpaperRepeat.addEventListener('change', () => applyWallpaperGeom({ repeat: wallpaperRepeat.checked }));
 }
 
 if (wallpaperResetPos) {
-  wallpaperResetPos.addEventListener('click', () => applyWallpaperGeom({ posX: 50, posY: 50, scale: 100, repeat: false }));
+  wallpaperResetPos.addEventListener('click', () => applyWallpaperGeom({ posX: 50, posY: 50, scale: 100, repeat: false, brightness: 100 }));
 }
 
 resetAllButton.addEventListener('click', () => {

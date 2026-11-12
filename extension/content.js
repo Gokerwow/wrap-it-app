@@ -237,10 +237,11 @@ function serializeVars(vars) {
 }
 
 function getWallpaper(settings) {
-  const fallback = { type: 'none', color: '', dataUrl: '', posX: 50, posY: 50, scale: 100, repeat: false };
+  const fallback = { type: 'none', color: '', dataUrl: '', posX: 50, posY: 50, scale: 100, repeat: false, brightness: 100 };
   if (!settings || typeof settings !== 'object') return fallback;
   const raw = settings.wallpaper;
   if (raw && typeof raw === 'object') {
+    const brightness = typeof raw.brightness === 'number' && Number.isFinite(raw.brightness) ? Math.max(20, Math.min(100, Math.round(raw.brightness))) : 100;
     const type = raw.type;
     if (type === 'image') {
       const dataUrl = typeof raw.dataUrl === 'string' ? raw.dataUrl.trim() : '';
@@ -249,13 +250,13 @@ function getWallpaper(settings) {
         const posY = typeof raw.posY === 'number' && Number.isFinite(raw.posY) ? Math.max(0, Math.min(100, Math.round(raw.posY))) : 50;
         const scale = typeof raw.scale === 'number' && Number.isFinite(raw.scale) ? Math.max(100, Math.min(250, Math.round(raw.scale))) : 100;
         const repeat = raw.repeat === true;
-        return { type: 'image', color: '', dataUrl, posX, posY, scale, repeat };
+        return { type: 'image', color: '', dataUrl, posX, posY, scale, repeat, brightness };
       }
       return fallback;
     }
     if (type === 'color') {
       const color = typeof raw.color === 'string' ? raw.color.trim() : '';
-      if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) return { type: 'color', color, dataUrl: '' };
+      if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) return { type: 'color', color, dataUrl: '', brightness };
       return fallback;
     }
     if (type === 'none') return fallback;
@@ -273,13 +274,22 @@ function buildWallpaperCss(vars, settings) {
     const posY = typeof wallpaper.posY === 'number' ? Math.max(0, Math.min(100, wallpaper.posY)) : 50;
     const scale = typeof wallpaper.scale === 'number' && wallpaper.scale > 100 ? `${wallpaper.scale}%` : 'cover';
     const repeat = wallpaper.repeat ? 'repeat' : 'no-repeat';
-    return `${WALLPAPER_SELECTORS} { background-image: url('${safe}') !important; background-position: ${posX}% ${posY}% !important; background-size: ${scale} !important; background-repeat: ${repeat} !important; opacity: 1 !important; filter: none !important; mask-image: unset !important; mask-repeat: unset !important; mask-size: unset !important; }`;
+    let bgImage = `url('${safe}')`;
+    if (wallpaper.brightness < 100) {
+      const dim = ((100 - wallpaper.brightness) / 100).toFixed(2);
+      bgImage = `linear-gradient(rgba(0, 0, 0, ${dim}), rgba(0, 0, 0, ${dim})), url('${safe}')`;
+    }
+    return `${WALLPAPER_SELECTORS} { background-image: ${bgImage} !important; background-position: ${posX}% ${posY}% !important; background-size: ${scale} !important; background-repeat: ${repeat} !important; opacity: 1 !important; filter: none !important; mask-image: unset !important; mask-repeat: unset !important; mask-size: unset !important; }`;
   }
   const tokenColor = vars ? vars['--WDS-systems-chat-background-wallpaper'] : '';
   const custom = wallpaper.type === 'color' ? wallpaper.color : '';
   const color = custom || tokenColor || '';
   if (!color) return '';
   if (!/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) return '';
+  if (wallpaper.brightness < 100) {
+    const dim = ((100 - wallpaper.brightness) / 100).toFixed(2);
+    return `${WALLPAPER_SELECTORS} { background-color: ${color} !important; background-image: linear-gradient(rgba(0, 0, 0, ${dim}), rgba(0, 0, 0, ${dim})) !important; }`;
+  }
   return `${WALLPAPER_SELECTORS} { background-color: ${color} !important; background-image: none !important; }`;
 }
 
