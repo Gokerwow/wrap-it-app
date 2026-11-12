@@ -1,0 +1,41 @@
+name: WhatsApp Token Sentinel
+
+on:
+  schedule:
+    # Runs daily at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  audit-and-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Live Sentinel Auto-Patch
+        run: python scripts/sentinel_wa_updater.py --auto-patch
+
+      - name: Commit and push changes if WhatsApp updated
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add extension/tokens.json extension/content.js
+            git commit -m "chore(tokens): auto-sync WDS tokens with live WhatsApp stylesheet"
+            git push
+          else
+            echo "All tokens verified live. No changes needed."
+          fi
