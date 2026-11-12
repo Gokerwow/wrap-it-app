@@ -10,6 +10,12 @@ Themes WhatsApp Web with WDS design tokens. No page scraping, no automation, no 
 - Add custom CSS in the Advanced tab, applied after the theme and wallpaper rules.
 - Live mini chat preview mirrors wallpaper, bubble, text, and tick colors as settings change.
 
+## Screenshots
+
+![Presets and live mini preview](../assets/screenshots/presets-preview.png)
+![Wallpaper framing with 2D pan pad](../assets/screenshots/wallpaper-pan-pad.png)
+![Wallpaper alignment and zoom controls](../assets/screenshots/custom-wallpaper-alignment.png)
+
 ## How it works
 
 Most theme extensions break because WhatsApp Web compiles its UI with Meta StyleX into generated atomic classes like `.x1ppz1d2`, and injects local CSS variables on child elements that defeat `:root` inheritance. A rule set only on `:root` loses to those scoped values.
